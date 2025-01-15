@@ -1,0 +1,43 @@
+log_filepath = "./output.log"
+unl_file_directory = "./UNL/"
+
+[[listing]]
+id = ""
+name = ""
+address = ""
+google_client_id = ""
+google_client_secret = ""
+google_spreadsheet_id = ""
+google_sheet_name = ""
+a_record = ""
+
+[[listing]]
+id = ""
+name = ""
+address = ""
+google_client_id = ""
+google_client_secret = ""
+google_spreadsheet_id = ""
+google_sheet_name = ""
+a_record = ""
+
+[[listing]]
+id = ""
+name = ""
+address = ""
+google_client_id = ""
+google_client_secret = ""
+google_spreadsheet_id = ""
+google_sheet_name = ""
+a_record = ""
+
+[AWS]
+region = ""
+stage = ""
+api_id = ""
+access_key = ""
+secret_key = ""
+
+[SES]
+from = ""
+to = ["", ""]
