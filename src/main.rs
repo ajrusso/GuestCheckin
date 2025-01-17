@@ -11,6 +11,8 @@ use logger::Logger;
 use log::{info, error};
 use settings::Settings;
 use tokio;
+use std::fs;
+use std::path::Path;
 
 
 #[tokio::main]
@@ -39,6 +41,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
     let mut all_unreg_guests: Vec<Vec<String>> = Vec::new();
     let mut all_checkin_issues: Vec<Vec<String>> = Vec::new();
     
+    // Create UNL file directory 
+    let path = Path::new(&settings.unl_file_directory);
+    if !path.exists() {
+        match fs::create_dir(path) {
+            Ok(_) => info!("Directory {} created successfully!", path.display()),
+            Err(e) => info!("Failed to create directory {}: {}", path.display(), e),
+        }
+    } else {
+        info!("Directory {} already exists.", path.display());
+    }
+
+
     for listing in settings.listing {
         let listing: Listing = Listing::new(
             &listing.id,
