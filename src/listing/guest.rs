@@ -186,7 +186,7 @@ impl Guest {
         // Check DOB datetime format
         if !dob.is_ok() {
             return Err(GuestError::InvalidInput(String::from("date of birth format incorrect")));
-        // Ensure DOB year is not the gcurrent year
+        // Ensure DOB year is not the current year
         } else if (dob.unwrap().year() == current_year) {
             return Err(GuestError::InvalidInput(String::from(format!("date of birth year is {}", current_year))));
         }
