@@ -1,7 +1,7 @@
 
 use std::fmt;
 use std::error::Error;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate, Utc};
 use log::warn;
 
 #[derive(Clone, Debug)]
@@ -179,8 +179,16 @@ impl Guest {
     }
 
     fn check_format_dob(&self) -> Result<(), GuestError> {
-        if !NaiveDate::parse_from_str(&self.birth_date, "%d.%m.%Y").is_ok() {
-            return Err(GuestError::InvalidInput(String::from("date of birth")));
+        let format = "%d.%m.%Y";
+        let dob = NaiveDate::parse_from_str(&self.birth_date, format);
+        let current_year = Utc::now().year();
+
+        // Check DOB datetime format
+        if !dob.is_ok() {
+            return Err(GuestError::InvalidInput(String::from("date of birth format incorrect")));
+        // Ensure DOB year is not the current year
+        } else if (dob.unwrap().year() == current_year) {
+            return Err(GuestError::InvalidInput(String::from(format!("date of birth year is {}", current_year))));
         }
         Ok(())
     }
