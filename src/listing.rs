@@ -11,8 +11,7 @@ pub struct Listing {
     id: String,
     name: String,
     address: String,
-    client_id: String,
-    client_secret: String,
+    service_account_key_filepath: String,
     spreadsheet_id: String,
     sheet_name: String,
     reservation: Reservation,
@@ -20,18 +19,17 @@ pub struct Listing {
 }
 
 impl Listing {
-    pub async fn new(id: &str, name: &str, address: &str, client_id: &str, client_secret: &str, 
-                     spreadsheet_id: &str, sheet_name: &str, a_record: &str) -> Self {
+    pub async fn new(id: &str, name: &str, address: &str, spreadsheet_id: &str, sheet_name: &str, 
+                     a_record: &str, service_account_key_filepath: &str) -> Self {
         Listing {
             id: id.to_string(),
             name: name.to_string(),
             address: address.to_string(),
-            client_id: client_id.to_string(),
-            client_secret: client_secret.to_string(),
             spreadsheet_id: spreadsheet_id.to_string(),
             sheet_name: sheet_name.to_string(),
             a_record: Self::add_datetime(a_record),
-            reservation: Reservation::new(client_id, client_secret, spreadsheet_id, sheet_name).await,
+            service_account_key_filepath: service_account_key_filepath.to_string(),
+            reservation: Reservation::new(spreadsheet_id, sheet_name, service_account_key_filepath).await,
         }
     }
 

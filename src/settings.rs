@@ -40,6 +40,7 @@ pub struct Settings {
     pub listing: Vec<Listing>,
     pub log_filepath: String,
     pub unl_file_directory: String,
+    pub service_account_key_filepath: String,
 }
 
 impl Settings {
