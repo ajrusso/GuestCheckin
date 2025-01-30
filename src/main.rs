@@ -52,17 +52,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
         info!("Directory {} already exists.", path.display());
     }
 
-
     for listing in settings.listing {
         let listing: Listing = Listing::new(
             &listing.id,
             &listing.name,
             &listing.address,
-            &listing.google_client_id,
-            &listing.google_client_secret,
             &listing.google_spreadsheet_id,
             &listing.google_sheet_name,
             &listing.a_record,
+            &settings.service_account_key_filepath,
+
         ).await;
 
         info!("Listing: {}", listing.get_name());
