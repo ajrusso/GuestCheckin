@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-use google_sheets4::{hyper::client::HttpConnector, hyper_rustls::HttpsConnector, oauth2::ApplicationSecret, oauth2::authenticator::Authenticator};
-use google_sheets4::{Sheets, oauth2, hyper, hyper_rustls};
+use google_sheets4::oauth2::{read_service_account_key, ServiceAccountAuthenticator};
+use google_sheets4::{hyper::client::HttpConnector, hyper_rustls::HttpsConnector};
+use google_sheets4::{Sheets, hyper, hyper_rustls};
 use google_sheets4::api::ValueRange;
 use serde_json::json;
 use log::{debug, info, warn, error};
@@ -9,77 +10,46 @@ use crate::listing::guest::Guest;
 
 #[derive(Clone)]
 pub struct Reservation {
-    client_id: String,
-    client_secret: String,
     spreadsheet_id: String,
     sheet_name: String,
-    secret: Option<ApplicationSecret>,
-    authenticator: Option<Authenticator<HttpsConnector<HttpConnector>>>,
     hub: Option<Sheets<HttpsConnector<HttpConnector>>>,
 }
 
 impl Reservation {
-    pub async fn new(client_id: &str, client_secret: &str, spreadsheet_id: &str, sheet_name: &str) -> Self {
+    pub async fn new(spreadsheet_id: &str, sheet_name: &str, service_account_key_filepath: &str) -> Self {
         let mut res = Reservation {
-            client_id: client_id.to_string(),
-            client_secret: client_secret.to_string(),
             spreadsheet_id: spreadsheet_id.to_string(),
             sheet_name: sheet_name.to_string(),
-            secret: None,
-            authenticator: None,
             hub: None,
         };
-        res.set_secret(client_id, client_secret);
-        res.set_authenticator().await;
-        res.set_hub();
+        res.set_hub(service_account_key_filepath).await;
         res
     }
 
-    fn set_secret(&mut self, client_id: &str, client_secret: &str) {
-        self.secret = Some(oauth2::ApplicationSecret {
-            client_id: client_id.to_string(),
-            client_secret: client_secret.to_string(),
-            token_uri: "https://oauth2.googleapis.com/token".to_string(),
-            auth_uri: "https://accounts.google.com/o/oauth2/auth".to_string(),
-            redirect_uris: vec!["http://localhost".to_string()],
-            auth_provider_x509_cert_url: Some("https://www.googleapis.com/oauth2/v1/certs".to_string()),
-            client_email: None,
-            client_x509_cert_url: None,
-            project_id: None,
-        });
-    }
+    async fn set_hub(&mut self, service_account_key_path: &str) {
+        
+        // Load service account key file
+        let service_account_key = read_service_account_key(service_account_key_path)
+            .await
+            .expect("Failed to read service account key");
+        
+        // Create the authenticator
+        let auth = ServiceAccountAuthenticator::builder(service_account_key)
+            .build()
+            .await.expect("Failed to create authenticator");
 
-    async fn set_authenticator(&mut self) {
-        match &self.secret {
-            Some(secret) => {
-                self.authenticator = Some(oauth2::InstalledFlowAuthenticator::builder (
-                    secret.clone(),
-                    oauth2::InstalledFlowReturnMethod::HTTPRedirect,
-                )
-                .build()
-                .await
-                .unwrap());
-            },
-            None => panic!("No Secret Found"),
-        }
-    }
 
-    fn set_hub(&mut self) {
-        match &self.authenticator {
-            Some(auth) => {
-                self.hub = Some(Sheets::new (
-                    hyper::Client::builder()
-                        .build(hyper_rustls::HttpsConnectorBuilder::new()
-                        .with_native_roots()
-                        .unwrap()
-                        .https_or_http()
-                        .enable_http1()
-                        .build()), 
-                    auth.clone(),
-                ));
-            },
-            None => panic!("No Authenticator found"), 
-        }
+        // Create the Sheets API client
+        self.hub = Some(Sheets::new (
+            hyper::Client::builder()
+                .build(hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .unwrap()
+                .https_or_http()
+                .enable_http1()
+                .build()), 
+            auth.clone(),
+        ));
     }
 
     // Update row (Guest) "Registered With Authorities" in spreadsheet 
@@ -185,44 +155,6 @@ impl Reservation {
                 },
                 None => warn!("Empty guest row found"),
             }
-
-            /*
-            let mut guest = Guest::new(&row_num);
-            match &unregistered_guest.values {
-                Some(row) => {
-                    for col in row {
-                        let mut i = 1;
-                        for val in col {
-                            match i {
-                                1  => guest.timestamp.push_str(val.to_string().trim_matches('"')),
-                                2  => guest.purpose_of_stay.push_str(&val.to_string().trim_matches('"')[0..2]),
-                                3  => guest.check_in.push_str(val.to_string().trim_matches('"')),
-                                4  => guest.check_out.push_str(val.to_string().trim_matches('"')), 
-                                5  => guest.surname.push_str(val.to_string().trim_matches('"')),
-                                6  => guest.first_name.push_str(val.to_string().trim_matches('"')),
-                                7  => guest.birth_date.push_str(val.to_string().trim_matches('"')),
-                                8  => guest.country_of_citizenship.push_str(&val.to_string().trim_matches('"')[0..3]),
-                                9  => guest.travel_doc_number.push_str(val.to_string().trim_matches('"')),
-                                10 => guest.visa_number.push_str(val.to_string().trim_matches('"')),
-                                11 => guest.address_abroad.push_str(val.to_string().trim_matches('"')),
-                                12 => guest.full_name.push_str(val.to_string().trim_matches('"')),
-                                _ => break,
-                            }
-                            i += 1;
-                        }
-                        debug!("Found unregistered guest: {}", guest);
-
-                        // Check input data format
-                        match guest.check_input_format() {
-                            Ok(_) => unregistered_guests.push(guest.clone()),
-                            Err(e) => {
-                                warn!("Unregistered guest can not be registered: {}", e.to_string());
-                            },
-                        }
-                    }
-                },
-                None => warn!("Empty guest row found"),
-            }*/
 
             unregistered_guest_count += 1; 
         }
