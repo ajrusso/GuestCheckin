@@ -4,7 +4,9 @@ use google_sheets4::{hyper::client::HttpConnector, hyper_rustls::HttpsConnector}
 use google_sheets4::{Sheets, hyper, hyper_rustls};
 use google_sheets4::api::ValueRange;
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 use log::{debug, info, warn, error};
+use std::error::Error;
 use crate::listing::guest::Guest;
 
 
@@ -222,16 +224,44 @@ impl Reservation {
         for row in rows {
             let range = format!("!{}:{}", row, row);
             let sheet_range = format!("{}{}", self.sheet_name, range);
-            let result = self.hub.clone()
-                .unwrap()
-                .spreadsheets()
-                .values_get(&self.spreadsheet_id, &sheet_range)
-                .doit()
-                .await
-                .unwrap();
-            // Log response
-            debug!("log guest_rows_response: {:?}", result.0);
-            guest_rows.push(result.1)
+
+            let mut attempts = 0;
+            loop {
+                match self.hub.clone()
+                    .unwrap()
+                    .spreadsheets()
+                    .values_get(&self.spreadsheet_id, &sheet_range)
+                    .doit()
+                    .await
+                {
+                    Ok(result) => {
+                        debug!("log guest_rows_response: {:?}", result.0);
+                        guest_rows.push(result.1);
+                        break;
+                    }
+                    Err(err) => {
+                        let err_msg = format!("{}", err);
+                        if err_msg.contains("RATE_LIMIT_EXCEEDED") && attempts < 5 {
+                            attempts += 1;
+                            eprintln!("Quota exceeded on row {} (attempt {}/5). Retrying in 60 seconds...", row, attempts);
+                            sleep(Duration::from_secs(60)).await;
+                        } else {
+                            eprintln!("Error retrieving row {}: {}", row, err);
+                            break; 
+                        }
+                    }
+                }
+                let result = self.hub.clone()
+                    .unwrap()
+                    .spreadsheets()
+                    .values_get(&self.spreadsheet_id, &sheet_range)
+                    .doit()
+                    .await
+                    .unwrap();
+                // Log response
+                debug!("log guest_rows_response: {:?}", result.0);
+                guest_rows.push(result.1)
+            }
         }
         guest_rows
     }
