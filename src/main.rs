@@ -3,6 +3,7 @@ mod settings;
 mod logger;
 mod unlfile;
 mod email;
+mod transliteration;
 
 use listing::Listing;
 use unlfile::UnlFile;
