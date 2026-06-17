@@ -6,6 +6,7 @@ use google_sheets4::api::ValueRange;
 use serde_json::json;
 use log::{debug, info, warn, error};
 use crate::listing::guest::Guest;
+use crate::transliteration::decode_html_entities;
 
 
 #[derive(Clone)]
@@ -125,18 +126,18 @@ impl Reservation {
                         // Load hash into Guest Object
                         let guest = Guest::new(
                             &row_num,
-                            guest_hash.get("timestamp").unwrap().to_string(),
-                            guest_hash.get("purpose_of_stay").unwrap().to_string(),
-                            guest_hash.get("check_in").unwrap().to_string(),
-                            guest_hash.get("check_out").unwrap().to_string(),
-                            guest_hash.get("surname").unwrap().to_string(),
-                            guest_hash.get("first_name").unwrap().to_string(),
-                            guest_hash.get("birth_date").unwrap().to_string(),
-                            guest_hash.get("country_of_citizenship").unwrap().to_string(),
-                            guest_hash.get("travel_doc_number").unwrap().to_string(),
-                            guest_hash.get("visa_number").unwrap().to_string(),
-                            guest_hash.get("address_abroad").unwrap().to_string(),
-                            guest_hash.get("full_name").unwrap().to_string()
+                            cell_string(&guest_hash, "timestamp"),
+                            cell_string(&guest_hash, "purpose_of_stay"),
+                            cell_string(&guest_hash, "check_in"),
+                            cell_string(&guest_hash, "check_out"),
+                            cell_string(&guest_hash, "surname"),
+                            cell_string(&guest_hash, "first_name"),
+                            cell_string(&guest_hash, "birth_date"),
+                            cell_string(&guest_hash, "country_of_citizenship"),
+                            cell_string(&guest_hash, "travel_doc_number"),
+                            cell_string(&guest_hash, "visa_number"),
+                            cell_string(&guest_hash, "address_abroad"),
+                            cell_string(&guest_hash, "full_name"),
                         );
 
                         debug!("Found unregistered guest: {}", guest);
@@ -235,4 +236,9 @@ impl Reservation {
         }
         guest_rows
     }
+}
+
+fn cell_string(map: &HashMap<String, String>, key: &str) -> String {
+    decode_html_entities(map.get(key).unwrap().trim())
+        .into_owned()
 }

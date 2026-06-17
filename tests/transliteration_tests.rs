@@ -1,12 +1,10 @@
-//! Integration tests for UbyPort transliteration.
-//! Covers allowed-character pass-through, table replacements, multi-char expansions,
-//! and edge cases (unknown Unicode, table consistency).
+//! Integration tests for UbyPort transliteration and name sanitization.
 
-use guest_checkin::transliteration::transliterate;
-use guest_checkin::transliteration::is_allowed;
-use guest_checkin::transliteration::TRANSLIT;
+use guest_checkin::transliteration::{
+    decode_html_entities, is_allowed, is_valid_unl_name, sanitize_address, sanitize_doc_number,
+    sanitize_name, transliterate, TRANSLIT,
+};
 
-/// Characters in the allowed set must be returned unchanged.
 #[test]
 fn test_allowed_characters_pass_through() {
     let input = "ÁáČčĎďÉéÍíÓóÚúÝýŽž";
@@ -14,7 +12,6 @@ fn test_allowed_characters_pass_through() {
     assert_eq!(output, input);
 }
 
-/// Single-character replacements from the transliteration table (e.g. ñ→n, ß→SS).
 #[test]
 fn test_basic_transliterations() {
     assert_eq!(transliterate("ñ"), "n");
@@ -28,7 +25,6 @@ fn test_basic_transliterations() {
     assert_eq!(transliterate("þ"), "t");
 }
 
-/// Characters that expand to two letters (e.g. Œ→OE, Ĳ→IJ).
 #[test]
 fn test_multi_character_transliterations() {
     assert_eq!(transliterate("Œ"), "OE");
@@ -37,15 +33,13 @@ fn test_multi_character_transliterations() {
     assert_eq!(transliterate("ĳ"), "ij");
 }
 
-/// Real-name example: mix of transliterated (ñ) and allowed (ó) characters.
 #[test]
 fn test_full_name_transliteration() {
     let input = "Castañeda Solórzano";
-    let expected = "Castaneda Solórzano"; // ñ → n, ó stays ó
+    let expected = "Castaneda Solórzano";
     assert_eq!(transliterate(input), expected);
 }
 
-/// Multiple replacements in one string (Æ, Þ, Ñ) with allowed chars (ó, ú) preserved.
 #[test]
 fn test_mixed_string() {
     let input = "Ægir Þór Ñandú";
@@ -53,7 +47,6 @@ fn test_mixed_string() {
     assert_eq!(transliterate(input), expected);
 }
 
-/// is_allowed returns true for basic Latin, diacritics in the allowed set, and space/apostrophe/hyphen.
 #[test]
 fn test_is_allowed_true_cases() {
     for c in ['A', 'z', 'Á', 'á', 'Č', 'č', 'Ó', 'ó', 'ß', ' '] {
@@ -61,7 +54,6 @@ fn test_is_allowed_true_cases() {
     }
 }
 
-/// is_allowed returns false for characters that must be transliterated (e.g. ñ, Æ).
 #[test]
 fn test_is_allowed_false_cases() {
     for c in ['ñ', 'Ñ', 'Æ', 'ø', 'Þ'] {
@@ -69,7 +61,6 @@ fn test_is_allowed_false_cases() {
     }
 }
 
-/// Every entry in TRANSLIT must map to its replacement when run through transliterate().
 #[test]
 fn test_transliteration_table_completeness() {
     for (key, val) in TRANSLIT.entries() {
@@ -79,10 +70,101 @@ fn test_transliteration_table_completeness() {
     }
 }
 
-/// Characters not in TRANSLIT and not in the allowed set pass through unchanged (no panic, no drop).
 #[test]
 fn test_no_panic_on_unknown_unicode() {
-    let input = "𐍈𐍈𐍈"; // Gothic letter faihu — not in table or allowed set
+    let input = "𐍈𐍈𐍈";
     let output = transliterate(input);
     assert_eq!(output, input);
+}
+
+// --- sanitize_name regression tests (issue #36 examples) ---
+
+#[test]
+fn test_sanitize_name_swedish() {
+    assert_eq!(sanitize_name("Franzén"), "Franzen");
+    assert_eq!(sanitize_name("Esbjörn"), "Esbjorn");
+    assert_eq!(sanitize_name("Höjer"), "Hojer");
+    assert_eq!(sanitize_name("Arvid"), "Arvid");
+}
+
+#[test]
+fn test_sanitize_name_turkish() {
+    assert_eq!(sanitize_name("Kesecioğlu Güvenç"), "Kesecioglu Guvenc");
+    assert_eq!(sanitize_name("Kesecio&#287;lu G&#252;ven&#231;"), "Kesecioglu Guvenc");
+    assert_eq!(sanitize_name("Öznur"), "Oznur");
+}
+
+#[test]
+fn test_sanitize_name_portuguese_brazilian() {
+    assert_eq!(sanitize_name("Gonçalves"), "Goncalves");
+    assert_eq!(sanitize_name("André"), "Andre");
+    assert_eq!(sanitize_name("Vitória"), "Vitoria");
+}
+
+#[test]
+fn test_sanitize_name_spanish() {
+    assert_eq!(sanitize_name("Ortegón"), "Ortegon");
+    assert_eq!(sanitize_name("Tesías"), "Tesias");
+    assert_eq!(sanitize_name("César"), "Cesar");
+    assert_eq!(sanitize_name("Gutiérrez Flores"), "Gutierrez Flores");
+    assert_eq!(sanitize_name("José Enrique"), "Jose Enrique");
+    assert_eq!(sanitize_name("González Martín"), "Gonzalez Martin");
+    assert_eq!(sanitize_name("Iván"), "Ivan");
+    assert_eq!(sanitize_name("Diez López - Linares"), "Diez Lopez - Linares");
+}
+
+#[test]
+fn test_sanitize_name_argentine() {
+    assert_eq!(sanitize_name("Tomás"), "Tomas");
+}
+
+#[test]
+fn test_sanitize_name_polish() {
+    assert_eq!(sanitize_name("Szczepański"), "Szczepanski");
+    assert_eq!(sanitize_name("Dąbrowski"), "Dabrowski");
+}
+
+#[test]
+fn test_sanitize_name_french() {
+    assert_eq!(sanitize_name("Zénobe"), "Zenobe");
+}
+
+#[test]
+fn test_sanitize_name_trims_whitespace() {
+    assert_eq!(sanitize_name("  Cervantes "), "Cervantes");
+    assert_eq!(sanitize_name("Jimena "), "Jimena");
+    assert_eq!(sanitize_name("Diez López - Linares "), "Diez Lopez - Linares");
+}
+
+#[test]
+fn test_sanitize_name_turkish_s_cedilla() {
+    assert_eq!(sanitize_name("Şahin"), "Sahin");
+    assert_eq!(sanitize_name("şule"), "sule");
+}
+
+#[test]
+fn test_is_valid_unl_name() {
+    assert!(is_valid_unl_name("Goncalves"));
+    assert!(is_valid_unl_name("O'Brien"));
+    assert!(is_valid_unl_name("da Silva-Goncalves"));
+    assert!(!is_valid_unl_name(""));
+    assert!(!is_valid_unl_name("Gonçalves"));
+}
+
+#[test]
+fn test_decode_html_entities() {
+    assert_eq!(decode_html_entities("&#287;"), "ğ");
+    assert_eq!(decode_html_entities("Kesecio&#287;lu"), "Kesecioğlu");
+    assert_eq!(decode_html_entities("plain"), "plain");
+}
+
+#[test]
+fn test_sanitize_doc_number_strips_spaces() {
+    assert_eq!(sanitize_doc_number("33119559 3ZZ2"), "331195593ZZ2");
+    assert_eq!(sanitize_doc_number("S25094413"), "S25094413");
+}
+
+#[test]
+fn test_sanitize_address_ordinal() {
+    assert_eq!(sanitize_address("2º dto"), "2o dto");
 }

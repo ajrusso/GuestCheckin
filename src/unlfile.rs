@@ -103,21 +103,11 @@ impl UnlFile {
 
     /// Write all U-records (guest lines) to the file.
     ///
-    /// Each `u_record` is:
-    /// - Transliteration-filtered (only allowed characters remain)
-    /// - Terminated with CRLF (`\r\n`)
-    /// - Encoded as Windows-1250
+    /// Each `u_record` is already field-sanitized; encode as Windows-1250 with CRLF.
     fn add_u_records(file: &mut File, u_records: Vec<String>) -> Result<(), UnlFileError> {
         for u_record in u_records {
-            // Apply transliteration so the line only contains allowed characters.
-            let sanitized = transliterate(&u_record);
-
-            // Add CRLF line ending.
-            let record = format!("{}\r\n", sanitized);
-
-            // Encode as Windows-1250.
+            let record = format!("{}\r\n", u_record);
             let (encoded, _, _) = WINDOWS_1250.encode(&record);
-
             file.write_all(&encoded)?;
         }
 

@@ -1,8 +1,10 @@
-
-use std::fmt;
 use std::error::Error;
+use std::fmt;
+
 use chrono::{Datelike, NaiveDate, Utc};
 use log::warn;
+
+use crate::transliteration::{is_valid_unl_name, sanitize_address, sanitize_doc_number, sanitize_name};
 
 #[derive(Clone, Debug)]
 pub struct Guest {
@@ -70,18 +72,19 @@ impl Guest {
     }
 
     pub fn get_u_record(&self) -> String {
-        format!{"U|{}|{}|{}|{}||{}|||{}|{}|{}|{}|{}||",
+        format!(
+            "U|{}|{}|{}|{}||{}|||{}|{}|{}|{}|{}||",
             self.check_in,
             self.check_out,
-            self.surname,
-            self.first_name,
+            sanitize_name(&self.surname),
+            sanitize_name(&self.first_name),
             self.birth_date,
             self.country_of_citizenship,
-            self.address_abroad,
-            self.travel_doc_number,
-            self.visa_number,
+            sanitize_address(&self.address_abroad),
+            sanitize_doc_number(&self.travel_doc_number),
+            sanitize_doc_number(&self.visa_number),
             self.purpose_of_stay
-        }
+        )
     }
    
     fn check_input_format(&mut self) {
@@ -126,6 +129,23 @@ impl Guest {
             warn!("Row {}, {} {}: {}", self.row, self.first_name, self.surname, e);
             self.data_errors.push(e)
         };
+        if let Err(e) = self.check_format_unl_names() {
+            warn!("Row {}, {} {}: {}", self.row, self.first_name, self.surname, e);
+            self.data_errors.push(e)
+        };
+    }
+
+    fn check_format_unl_names(&self) -> Result<(), GuestError> {
+        let surname = sanitize_name(&self.surname);
+        let first_name = sanitize_name(&self.first_name);
+
+        if !is_valid_unl_name(&surname) {
+            return Err(GuestError::InvalidInput(String::from("surname (UbyPort characters)")));
+        }
+        if !first_name.is_empty() && !is_valid_unl_name(&first_name) {
+            return Err(GuestError::InvalidInput(String::from("first name (UbyPort characters)")));
+        }
+        Ok(())
     }
     
     pub fn get_data_errors(&self) -> String {
@@ -208,17 +228,19 @@ impl Guest {
     }
 
     fn check_format_travel_doc_number(&self) -> Result<(), GuestError> {
-        match self.travel_doc_number.chars().count() {
+        let doc = sanitize_doc_number(&self.travel_doc_number);
+        match doc.chars().count() {
             6..=30 => Ok(()),
             _ => return Err(GuestError::InvalidInput(String::from("travel doc number"))),
-        } 
+        }
     }
 
     fn check_format_visa_number(&self) -> Result<(), GuestError> {
-        match self.visa_number.chars().count() {
+        let visa = sanitize_doc_number(&self.visa_number);
+        match visa.chars().count() {
             0..=15 => Ok(()),
             _ => return Err(GuestError::InvalidInput(String::from("visa number"))),
-        } 
+        }
     }
 
     fn check_format_purpose_of_stay(&self) -> Result<(), GuestError> {
