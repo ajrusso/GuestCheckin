@@ -1,12 +1,37 @@
 use std::collections::HashMap;
+
 use google_sheets4::oauth2::{read_service_account_key, ServiceAccountAuthenticator};
 use google_sheets4::{hyper::client::HttpConnector, hyper_rustls::HttpsConnector};
 use google_sheets4::{Sheets, hyper, hyper_rustls};
 use google_sheets4::api::ValueRange;
 use serde_json::json;
 use log::{debug, info, warn, error};
+use tokio::time::sleep;
+
 use crate::listing::guest::Guest;
 use crate::transliteration::decode_html_entities;
+
+const SHEETS_RETRY_ATTEMPTS: u32 = 5;
+const SHEETS_RETRY_BASE_MS: u64 = 1000;
+const SHEETS_QUOTA_RETRY_SECS: u64 = 60;
+
+fn is_retryable_sheets_error(err: &str) -> bool {
+    err.contains("503")
+        || err.contains("UNAVAILABLE")
+        || err.contains("429")
+        || err.contains("RATE_LIMIT_EXCEEDED")
+        || err.contains("rateLimit")
+        || err.contains("quota")
+        || err.contains("backendError")
+}
+
+fn retry_delay(err: &str, attempt: u32) -> std::time::Duration {
+    if err.contains("RATE_LIMIT_EXCEEDED") || err.contains("quota") {
+        std::time::Duration::from_secs(SHEETS_QUOTA_RETRY_SECS)
+    } else {
+        std::time::Duration::from_millis(SHEETS_RETRY_BASE_MS * 2u64.pow(attempt.saturating_sub(1)))
+    }
+}
 
 
 #[derive(Clone)]
@@ -170,18 +195,53 @@ impl Reservation {
     }
 
     // Gets Google Spreadsheet column containing is_registered bool
-    async fn get_unregistered_responses(&self) -> ValueRange{
+    async fn get_unregistered_responses(&self) -> ValueRange {
         let range = "!M2:M";
         let sheet_range = format!("{}{}", self.sheet_name, range);
-        let result = self.hub.clone()
-            .unwrap()
-            .spreadsheets()
-            .values_get(&self.spreadsheet_id, &sheet_range)
-            .doit()
-            .await
-            .unwrap();
 
-        result.1
+        match self.sheets_values_get_with_retry(&sheet_range).await {
+            Ok(value_range) => value_range,
+            Err(e) => {
+                error!(
+                    "Google Sheets unavailable for spreadsheet {} sheet {}: {}",
+                    self.spreadsheet_id, self.sheet_name, e
+                );
+                ValueRange::default()
+            }
+        }
+    }
+
+    async fn sheets_values_get_with_retry(&self, sheet_range: &str) -> Result<ValueRange, String> {
+        let hub = self.hub.clone().ok_or_else(|| "No Google hub found".to_string())?;
+        let mut last_err = String::new();
+
+        for attempt in 1..=SHEETS_RETRY_ATTEMPTS {
+            let result = hub
+                .spreadsheets()
+                .values_get(&self.spreadsheet_id, sheet_range)
+                .doit()
+                .await;
+
+            match result {
+                Ok(response) => return Ok(response.1),
+                Err(e) => {
+                    last_err = e.to_string();
+
+                    if attempt < SHEETS_RETRY_ATTEMPTS && is_retryable_sheets_error(&last_err) {
+                        let delay = retry_delay(&last_err, attempt);
+                        warn!(
+                            "Google Sheets request failed (attempt {}/{}), retrying in {:?}: {}",
+                            attempt, SHEETS_RETRY_ATTEMPTS, delay, last_err
+                        );
+                        sleep(delay).await;
+                        continue;
+                    }
+                    return Err(last_err);
+                }
+            }
+        }
+
+        Err(last_err)
     }
 
     // Checks "Registered With Authorities" column input for unregistered guests
@@ -223,16 +283,15 @@ impl Reservation {
         for row in rows {
             let range = format!("!{}:{}", row, row);
             let sheet_range = format!("{}{}", self.sheet_name, range);
-            let result = self.hub.clone()
-                .unwrap()
-                .spreadsheets()
-                .values_get(&self.spreadsheet_id, &sheet_range)
-                .doit()
-                .await
-                .unwrap();
-            // Log response
-            debug!("log guest_rows_response: {:?}", result.0);
-            guest_rows.push(result.1)
+            match self.sheets_values_get_with_retry(&sheet_range).await {
+                Ok(value_range) => guest_rows.push(value_range),
+                Err(e) => {
+                    error!(
+                        "Failed to fetch guest row {} from spreadsheet {}: {}",
+                        row, self.spreadsheet_id, e
+                    );
+                }
+            }
         }
         guest_rows
     }
