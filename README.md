@@ -2,20 +2,22 @@
 
 Rust CLI that scans Google Sheets for unregistered guests.
 
+**Docs:** [docs/README.md](./docs/README.md) — [configuration](./docs/configuration.md) · [smoke testing](./docs/smoke-testing.md)
+
 **Modes**
 
 | `submit_mode` | Behavior |
 |---------------|----------|
 | `unl` (default) | Write UNL files and email them via AWS SES (classic) |
-| `soap` | **Blue Glory POC only:** submit via CheckIn `POST /api/ubyport/submit-guests`, mark Sheet column M **only on accept**, SES summary email **without UNL/PDF attachments** |
+| `soap` | **POC bridge:** submit via CheckIn `POST /api/ubyport/submit-guests`, mark Sheet column M **only on accept**, SES summary email **without UNL/PDF attachments** |
 
 The soap path is a **temporary POC bridge** (Sheets → CheckIn → UbyPort). It is **not** future product intake. The host register remains the Google Sheet.
 
 ## Prerequisites
 
 - Rust toolchain (`cargo`, `rustc`)
-- `src/config/config.toml` (copy from `src/config/config.toml.example` and fill in)
-- `service_account_key.json` in the project root
+- Config file (see [docs/configuration.md](./docs/configuration.md)); start from `src/config/config.toml.example`
+- `service_account_key.json` in the working directory
 - For soap mode: CheckIn running with pilot token + encryption key; `[checkin]` in config
 
 ## Development
@@ -33,11 +35,29 @@ Or build a debug binary:
 cargo build
 ```
 
+## Config profiles (prod vs smoke)
+
+Default load order: `--config` → `GUESTCHECKIN_CONFIG` → `./config.toml` → `src/config/config.toml`.
+
+Keep everyday UNL settings in `config.toml`. For TWS211 soap smoke, copy  
+`src/config/config.smoke.toml.example` → `config.smoke.toml` (gitignored), point one listing at a **fake-data** Sheet tab, then:
+
+```powershell
+cd dist\GuestCheckin
+$env:GUESTCHECKIN_CONFIG = "config.smoke.toml"
+.\guest-checkin.exe
+# or: .\guest-checkin.exe --config config.smoke.toml
+```
+
+Details: [docs/configuration.md](./docs/configuration.md) · [docs/smoke-testing.md](./docs/smoke-testing.md).
+
+Optional launcher: copy `scripts/run-smoke.cmd.example` next to the exe as `run-smoke.cmd`.
+
 ## Soap mode (Blue Glory POC / #68)
 
-1. Set `submit_mode = "soap"` and fill `[checkin]` in `config.toml` (see example).
+1. Set `submit_mode = "soap"` and fill `[checkin]` (or use the smoke profile above).
 2. Ensure CheckIn is up (`GET /api/ubyport/health`) with `UBYPORT_PILOT_TOKEN` matching config.
-3. Run once: `cargo run` or Docker (below).
+3. Run once: `cargo run` / exe / Docker.
 4. Distro email reuses the existing SES HTML template with accepted / rejected / issue tables — **no passport numbers, no UNL attachments**.
 5. Encrypted doručenka PDFs land under CheckIn’s host-mounted `pilot-runs/` (not in this agent).
 
@@ -56,6 +76,8 @@ Daily schedule (host): Task Scheduler or cron → `docker compose run --rm guest
 Set `PILOT_RUNS_HOST` if CheckIn’s `pilot-runs` directory is not at `../CheckIn/backend/pilot-runs`.
 
 On Windows Docker Desktop, `host.docker.internal` reaches CheckIn on the host (see `config.toml.example`).
+
+For Compose smoke, mount or bake `GUESTCHECKIN_CONFIG` / a smoke TOML the same way as local profiles — do not point at a live guest register.
 
 ## Windows desktop shortcut (portable install)
 

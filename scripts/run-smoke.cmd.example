@@ -1,0 +1,12 @@
+@echo off
+REM Soap / TWS211 smoke using config.smoke.toml (does not touch config.toml).
+cd /d "%~dp0"
+if not exist "config.smoke.toml" (
+  echo Missing config.smoke.toml — copy from src\config\config.smoke.toml.example and fill in.
+  pause
+  exit /b 1
+)
+set GUESTCHECKIN_CONFIG=config.smoke.toml
+guest-checkin.exe
+echo.
+pause

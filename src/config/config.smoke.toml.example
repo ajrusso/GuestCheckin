@@ -1,0 +1,41 @@
+# Throwaway / soap smoke profile — copy to config.smoke.toml (gitignored) and fill in.
+# Leave dist/GuestCheckin/config.toml as your normal UNL/prod agent config.
+#
+# Run from the directory that contains this file (e.g. dist/GuestCheckin):
+#   $env:GUESTCHECKIN_CONFIG = "config.smoke.toml"
+#   .\guest-checkin.exe
+# Or:
+#   .\guest-checkin.exe --config config.smoke.toml
+
+log_filepath = "./output.smoke.log"
+unl_file_directory = "./UNL/"
+service_account_key_filepath = "./service_account_key.json"
+scan_state_filepath = "./scan_state.smoke.json"
+
+submit_mode = "soap"
+
+[checkin]
+base_url = "http://127.0.0.1:5000"
+pilot_token = "replace-with-UBYPORT_PILOT_TOKEN"
+
+# Single listing pointed at a Google Sheet *tab* with fictitious guests only (TWS211).
+[[listing]]
+id = "smoke"
+name = "SMOKE TWS211"
+address = ""
+google_client_id = ""
+google_client_secret = ""
+google_spreadsheet_id = ""
+google_sheet_name = "Smoke-TWS211"
+a_record = "A|2|000000000000|SMOKE|Smoke Test|||Prague||||||||AddDate||"
+
+[AWS]
+region = ""
+stage = "dev"
+api_id = ""
+access_key = ""
+secret_key = ""
+
+[SES]
+from = ""
+to = [""]

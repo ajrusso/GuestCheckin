@@ -21,6 +21,11 @@ Cargo.lock
 #.idea/
 
 /src/config/config.toml
+/config.smoke.toml
+/config.dev.toml
+/config.local.toml
+/scan_state.smoke.json
+/output.smoke.log
 /UNL/
 /Receipts/
 /output.log
