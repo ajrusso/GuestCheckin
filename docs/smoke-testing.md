@@ -32,6 +32,8 @@ Encrypting real Sheet fields does **not** satisfy the rule.
 
 **Pass:** accepted rows get column M = TRUE; rejects stay unmarked; SES summary has outcome tables, **no UNL/PDF attachments**, no passport numbers; PDFs only under CheckIn `pilot-runs/`.
 
+Use check-in/out dates PCR accepts on TWS211 (invalid check-in → chyby **101**). Prefer today / near-term stay dates for smoke rows.
+
 ## After robotic account (#66)
 
 Same flows against production `ws_uby` / real facility credentials — only when intentionally going live.
