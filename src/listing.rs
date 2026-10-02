@@ -1,8 +1,7 @@
 mod guest;
 mod reservation;
 
-use crate::listing::guest::Guest;
-use crate::listing::reservation::Reservation;
+use crate::listing::reservation::{Reservation, UnregisteredScanResult};
 use chrono::{prelude::*, FixedOffset};
 
 
@@ -35,10 +34,17 @@ impl Listing {
 
     pub fn get_name(&self) -> &str {&self.name}
     pub fn get_a_record(&self) -> &str {&self.a_record}
+    pub fn get_spreadsheet_id(&self) -> &str {&self.spreadsheet_id}
+    pub fn get_sheet_name(&self) -> &str {&self.sheet_name}
 
-    pub async fn find_unregistered_guests(&self) -> Vec<Guest> {
-        let unregistered_guests =  self.reservation.find_unregistered_guests().await;
-        unregistered_guests
+    pub async fn find_unregistered_guests(
+        &self,
+        pending_rows: &[u32],
+        last_seen_row: u32,
+    ) -> UnregisteredScanResult {
+        self.reservation
+            .find_unregistered_guests(pending_rows, last_seen_row)
+            .await
     }
     
     pub async fn update_guest_as_registered(&self, row: &str, first_name: &str, last_name: &str) {

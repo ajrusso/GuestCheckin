@@ -1,11 +1,23 @@
 log_filepath = "./output.log"
 unl_file_directory = "./UNL/"
 service_account_key_filepath = "./service_account_key.json"
+scan_state_filepath = "./scan_state.json"
+
+# unl = classic UNL + SES attachments (default)
+# soap = Blue Glory POC: CheckIn POST /api/ubyport/submit-guests (no UNL attachments)
+submit_mode = "unl"
+
+# Required when submit_mode = "soap"
+[checkin]
+base_url = "http://host.docker.internal:5000"
+pilot_token = "replace-with-UBYPORT_PILOT_TOKEN"
 
 [[listing]]
 id = ""
 name = ""
 address = ""
+google_client_id = ""
+google_client_secret = ""
 google_spreadsheet_id = ""
 google_sheet_name = ""
 a_record = ""
@@ -14,6 +26,8 @@ a_record = ""
 id = ""
 name = ""
 address = ""
+google_client_id = ""
+google_client_secret = ""
 google_spreadsheet_id = ""
 google_sheet_name = ""
 a_record = ""
@@ -22,6 +36,8 @@ a_record = ""
 id = ""
 name = ""
 address = ""
+google_client_id = ""
+google_client_secret = ""
 google_spreadsheet_id = ""
 google_sheet_name = ""
 a_record = ""

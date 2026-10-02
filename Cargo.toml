@@ -2,6 +2,10 @@
 name = "guest-checkin"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
 
 [dependencies]
 config = "0.14.0"
@@ -14,7 +18,7 @@ serde_json = "^1.0"
 tokio = {version = "1.40.0", features = ["full"]}
 humantime = "2.1.0"
 chrono = "0.4.38"
-reqwest = "0.12.8"
+reqwest = { version = "0.12.8", default-features = true, features = ["json"] }
 aws-sigv4 = "1.2.4"
 aws-smithy-runtime-api = "1.7.2"
 http = "1.1.0"

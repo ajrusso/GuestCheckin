@@ -1,11 +1,20 @@
 use log::{info, warn};
-use rusoto_core::{Region, HttpClient};
+use rusoto_core::{HttpClient, Region};
 use rusoto_credential::StaticProvider;
 use rusoto_sesv2::{Destination, EmailContent, RawMessage, SendEmailRequest, SesV2, SesV2Client};
-use std::{fs::File, str::FromStr};
+use std::fs::File;
 use std::io::Read;
+use std::path::Path;
+use std::str::FromStr;
+
+use guest_checkin::email_html::{build_soap_email_html, build_unl_email_html};
 use base64::encode;
 
+fn resolve_header_image_path() -> Option<&'static str> {
+    // Portable install copies the image next to the exe; repo/dev keeps it under src/.
+    const CANDIDATES: &[&str] = &["header_image.jpg", "src/header_image.jpg"];
+    CANDIDATES.into_iter().copied().find(|path| Path::new(path).exists())
+}
 
 pub struct Email {
     attachments: Vec<String>,
@@ -26,104 +35,62 @@ impl Email {
         secret_key: &str,
         region: &str,
     ) -> Self {
-        
         let region_object = match Region::from_str(region) {
             Ok(region) => region,
             Err(_) => panic!("Improper AWS region name given"),
         };
 
-        let credentials_provider = StaticProvider::new_minimal(
-            access_key.to_string(),
-            secret_key.to_string()
-        );
+        let credentials_provider =
+            StaticProvider::new_minimal(access_key.to_string(), secret_key.to_string());
 
         Self {
-            attachments: attachments,
-            from: from,
-            to: to,
+            attachments,
+            from,
+            to,
             subject: subject.to_string(),
             credentials: credentials_provider,
             region: region_object,
         }
     }
 
-    pub async fn send(&self, unregistered_guests: Vec<Vec<String>>, checkin_issues: Vec<Vec<String>>) {
+    pub async fn send(
+        &self,
+        unregistered_guests: Vec<Vec<String>>,
+        checkin_issues: Vec<Vec<String>>,
+    ) {
+        let header_image = load_header_image();
+        let image_html = header_image_html(header_image.is_some());
+        let html_content = build_unl_email_html(&image_html, &unregistered_guests, &checkin_issues);
+        self.send_raw_html(html_content, header_image, true).await;
+    }
 
-        // Create the raw email message with multiple attachments
+    /// Soap / CheckIn mode: outcome tables, **no UNL/PDF attachments**, no travel doc numbers in rows.
+    pub async fn send_soap_summary(
+        &self,
+        accepted: Vec<Vec<String>>,
+        rejected: Vec<Vec<String>>,
+        checkin_issues: Vec<Vec<String>>,
+    ) {
+        let header_image = load_header_image();
+        let image_html = header_image_html(header_image.is_some());
+        let html_content = build_soap_email_html(&image_html, &accepted, &rejected, &checkin_issues);
+        self.send_raw_html(html_content, header_image, false).await;
+    }
+
+    async fn send_raw_html(
+        &self,
+        html_content: String,
+        header_image: Option<String>,
+        include_attachments: bool,
+    ) {
         let mut recipients = String::new();
         for recipient in &self.to {
             recipients.push_str(&format!("{}, ", &recipient));
         }
 
-        // Unregistered Guests Table
-        let mut table_data: Vec<Vec<String>> = Vec::new();
-        table_data.push(vec!["Listing".to_string(), "Row".to_string(), "Fullname".to_string(), "Check In".to_string(), "Check Out".to_string()]);
-        for guest in unregistered_guests {
-            table_data.push(guest);
-        }
-
-        // Generate HTML unregistered guests table rows
-        let mut unreg_guests_table_rows = String::new();
-        for row in table_data {
-            unreg_guests_table_rows.push_str("<tr>");
-            for cell in row {
-                unreg_guests_table_rows.push_str(&format!("<td>{}</td>", cell));
-            }
-            unreg_guests_table_rows.push_str("</tr>");
-        }
-
-        // Guests with checkin issues
-        let mut table_data: Vec<Vec<String>> = Vec::new();
-        table_data.push(vec!["Listing".to_string(), "Row".to_string(), "Fullname".to_string(), "Input Error(s)".to_string()]);
-        for guest in checkin_issues {
-            table_data.push(guest);
-        }
-
-        // Generate HTML checkin issues table rows
-        let mut checkin_issues_table_rows = String::new();
-        for row in table_data {
-            checkin_issues_table_rows.push_str("<tr>");
-            for cell in row {
-                checkin_issues_table_rows.push_str(&format!("<td>{}</td>", cell));
-            }
-            checkin_issues_table_rows.push_str("</tr>");
-        }
-
-        let inline_image_path = "src/header_image.jpg";
-
-        // HTML content with tables and an image
-        let html_content = format!(
-            r#"
-            <html>
-            <body>
-                <img src="cid:header_image.jpg" alt="Image" style="width:100%; max-width:600px;">
-                <br>
-                <br>
-                <h2 style="color: #1E90FF;">Guests Available for Checkin</h2>
-                <table border="1">
-                    {}
-                </table>
-                <br>
-                <h2 style="color: #1E90FF;">Guests with Checkin Issues</h2>
-                <table border="1">
-                    {}
-                </table>
-            </body>
-            </html>
-            "#,
-            unreg_guests_table_rows, checkin_issues_table_rows
-        );
-
-        // Load the inline image file
-        let mut image_file = File::open(inline_image_path).expect("Unable to open image file");
-        let mut image_content = Vec::new();
-        image_file.read_to_end(&mut image_content).expect("Unable to read image file");
-        let encoded_image = encode(&image_content);
-
         let mut raw_email = String::new();
-        raw_email.push_str(
-            &format!(
-                "From: {}\r\n\
+        raw_email.push_str(&format!(
+            "From: {}\r\n\
                 To: {}\r\n\
                 Subject: {}\r\n\
                 MIME-Version: 1.0\r\n\
@@ -138,44 +105,57 @@ impl Email {
                 Content-Type: text/html; charset=\"UTF-8\"\r\n\
                 Content-Transfer-Encoding: 7bit\r\n\r\n\
                 {}\r\n\r\n\
-                --subboundary--\r\n\
-                --boundary\r\n\
+                --subboundary--\r\n",
+            self.from, recipients, self.subject, html_content
+        ));
+
+        if let Some(encoded_image) = header_image {
+            raw_email.push_str(&format!(
+                "--boundary\r\n\
                 Content-Type: image/jpeg; name=\"header_image.jpg\"\r\n\
                 Content-Transfer-Encoding: base64\r\n\
                 Content-Disposition: inline; filename=\"header_image.jpg\"\r\n\
                 Content-ID: <header_image.jpg>\r\n\r\n\
                 {}\r\n",
-                self.from, recipients, self.subject, html_content, encoded_image
-            )
-        );
+                encoded_image
+            ));
+        }
 
-        for attachment in &self.attachments {
-            
-            // Load the attachment file
-            info!("Attaching file {} to email", attachment);
-            let mut file = File::open(attachment).expect("Unable to open file");
-            let mut file_content = Vec::new();
-            file.read_to_end(&mut file_content).expect("Unable to read file");
-            let encoded_file = encode(&file_content);
+        if include_attachments {
+            for attachment in &self.attachments {
+                info!("Attaching file {} to email", attachment);
+                let mut file = match File::open(attachment) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        warn!("Unable to open attachment {}: {}", attachment, e);
+                        continue;
+                    }
+                };
+                let mut file_content = Vec::new();
+                if let Err(e) = file.read_to_end(&mut file_content) {
+                    warn!("Unable to read attachment {}: {}", attachment, e);
+                    continue;
+                }
+                let encoded_file = encode(&file_content);
 
-            // Get the file name from the path
-            let file_name = attachment.split('/').last().unwrap_or("attachment");
+                let file_name = Path::new(attachment)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("attachment");
 
-            // Append attachment part
-            raw_email.push_str(&format!(
-                "--boundary\r\n\
+                raw_email.push_str(&format!(
+                    "--boundary\r\n\
                 Content-Type: application/octet-stream; name=\"{}\"\r\n\
                 Content-Transfer-Encoding: base64\r\n\
                 Content-Disposition: attachment; filename=\"{}\"\r\n\r\n\
                 {}\r\n",
-                file_name, file_name, encoded_file
-            ));
+                    file_name, file_name, encoded_file
+                ));
+            }
         }
 
-        // Close the MIME boundary
         raw_email.push_str("--boundary--");
 
-        // Create the SES client
         let client = SesV2Client::new_with(
             HttpClient::new().expect("Failed to create HTTP client"),
             self.credentials.clone(),
@@ -198,10 +178,46 @@ impl Email {
             ..Default::default()
         };
 
-        // Send the email
         match client.send_email(request).await {
             Ok(_) => info!("Email sent successfully!"),
             Err(e) => warn!("Error sending email: {:?}", e),
         }
     }
+}
+
+fn header_image_html(has_image: bool) -> String {
+    if has_image {
+        r#"<img src="cid:header_image.jpg" alt="Image" style="width:100%; max-width:600px;"><br><br>"#
+            .to_string()
+    } else {
+        String::new()
+    }
+}
+
+fn load_header_image() -> Option<String> {
+    let header_image = resolve_header_image_path().and_then(|path| match File::open(path) {
+        Ok(mut image_file) => {
+            let mut image_content = Vec::new();
+            match image_file.read_to_end(&mut image_content) {
+                Ok(_) => {
+                    info!("Using email header image {}", path);
+                    Some(encode(&image_content))
+                }
+                Err(e) => {
+                    warn!("Unable to read header image {}: {}", path, e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Unable to open header image {}: {}", path, e);
+            None
+        }
+    });
+    if header_image.is_none() {
+        warn!(
+            "Email header image not found (looked for header_image.jpg and src/header_image.jpg); sending without it"
+        );
+    }
+    header_image
 }

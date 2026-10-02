@@ -4,7 +4,7 @@ use std::fmt;
 use chrono::{Datelike, NaiveDate, Utc};
 use log::warn;
 
-use crate::transliteration::{is_valid_unl_name, sanitize_address, sanitize_doc_number, sanitize_name};
+use guest_checkin::transliteration::{is_valid_unl_name, sanitize_address, sanitize_doc_number, sanitize_name};
 
 #[derive(Clone, Debug)]
 pub struct Guest {
@@ -71,6 +71,14 @@ impl Guest {
         guest
     }
 
+    pub fn travel_doc_number(&self) -> &str {
+        &self.travel_doc_number
+    }
+
+    pub fn visa_number(&self) -> &str {
+        &self.visa_number
+    }
+
     pub fn get_u_record(&self) -> String {
         format!(
             "U|{}|{}|{}|{}||{}|||{}|{}|{}|{}|{}||",
@@ -84,6 +92,22 @@ impl Guest {
             sanitize_doc_number(&self.travel_doc_number),
             sanitize_doc_number(&self.visa_number),
             self.purpose_of_stay
+        )
+    }
+
+    /// Map to CheckIn GuestInput for soap submit mode.
+    pub fn to_guest_input(&self) -> guest_checkin::guest_input::GuestInput {
+        guest_checkin::guest_input::map_sheet_guest(
+            &self.surname,
+            &self.first_name,
+            &self.birth_date,
+            &self.check_in,
+            &self.check_out,
+            &self.country_of_citizenship,
+            &self.travel_doc_number,
+            &self.visa_number,
+            &self.address_abroad,
+            &self.purpose_of_stay,
         )
     }
    

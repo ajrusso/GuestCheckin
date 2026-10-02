@@ -25,3 +25,5 @@ Cargo.lock
 /Receipts/
 /output.log
 /service_account_key.json
+/scan_state.json
+/dist/

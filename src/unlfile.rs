@@ -10,7 +10,7 @@ use std::io::Write;
 
 use encoding_rs::WINDOWS_1250;
 
-use crate::transliteration::transliterate;
+use guest_checkin::transliteration::transliterate;
 
 /// Errors that can occur when creating or writing an UNL file.
 #[derive(Debug)]

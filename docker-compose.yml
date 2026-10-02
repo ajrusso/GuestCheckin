@@ -1,0 +1,23 @@
+# Blue Glory POC agent (#68) — disposable Sheets bridge (not future intake).
+#
+# Daily (host Task Scheduler / cron):
+#   docker compose run --rm guestcheckin-agent
+#
+# CheckIn must be reachable at [checkin].base_url (host network / host.docker.internal).
+# Encrypted doručenka PDFs are written by CheckIn under the host pilot-runs volume.
+
+services:
+  guestcheckin-agent:
+    build: .
+    container_name: guestcheckin-agent
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - ./service_account_key.json:/app/service_account_key.json:ro
+      - ./scan_state.json:/app/scan_state.json
+      - ./output.log:/app/output.log
+      # Shared host volume with CheckIn (receipts written by CheckIn, not this agent)
+      - ${PILOT_RUNS_HOST:-../CheckIn/backend/pilot-runs}:/pilot-runs
+    working_dir: /app
+    # Windows Docker Desktop: host.docker.internal reaches CheckIn on the host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
