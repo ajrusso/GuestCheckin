@@ -42,3 +42,8 @@ Same flows against production `ws_uby` / real facility credentials — only when
 
 - Blank column M cells are omitted by the Sheets API; GuestCheckin treats a fully empty M column (or trailing blanks) as unregistered.
 - CheckIn PARTIAL_SUCCESS / validation failures put per-guest esults on envelope `meta`; the agent reads those to mark column M only for `accepted`.
+
+## Docker smoke
+
+Build with `docker compose build`, mount `config.smoke.toml` (with `base_url = http://host.docker.internal:5000` on Desktop), then `docker compose run --rm guestcheckin-agent`.
+
