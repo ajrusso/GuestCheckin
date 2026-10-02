@@ -251,9 +251,31 @@ impl Reservation {
         };
 
         if last_seen_row < 2 {
-            // Bootstrap: full Column M scan for currently unregistered guests
+            // Bootstrap: full Column M scan for currently unregistered guests.
+            // Google Sheets omits empty cells — a blank M column returns no values, so
+            // fall back to every data row present in column A.
             let m_response = self.get_registration_column(2).await;
-            let unregistered = Self::get_unregistered_guests(m_response, 2);
+            let m_rows = m_response.values.as_ref().map(|r| r.len()).unwrap_or(0);
+            let mut unregistered = if m_rows > 0 {
+                Self::get_unregistered_guests(m_response, 2)
+            } else {
+                Vec::new()
+            };
+            if m_rows == 0 && new_last_seen >= 2 {
+                info!(
+                    "Column M empty through row {}; treating rows 2..={} as unregistered",
+                    new_last_seen, new_last_seen
+                );
+                unregistered = (2..=new_last_seen).collect();
+            } else if m_rows > 0 && new_last_seen >= 2 {
+                // Trailing blank M cells are omitted; include rows after the last M value.
+                let last_m_row = 2 + (m_rows as u32) - 1;
+                for row in (last_m_row + 1)..=new_last_seen {
+                    unregistered.push(row);
+                }
+                unregistered.sort_unstable();
+                unregistered.dedup();
+            }
             let last_seen = new_last_seen.max(
                 unregistered.iter().copied().max().unwrap_or(0),
             );
@@ -419,8 +441,10 @@ impl Reservation {
             for cell in row {
                 match cell.get(0) {
                     Some(value) => {
-                        let v = value.as_str().unwrap().to_lowercase();
-                        if v.contains("false") {
+                        let v = value.as_str().unwrap_or("").trim().to_lowercase();
+                        // Blank / FALSE = not yet registered; TRUE = skip.
+                        let registered = v == "true" || v.contains("true");
+                        if !registered {
                             guests.push(i);
                             unregister_guest_count += 1;
                         }

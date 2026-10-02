@@ -35,3 +35,8 @@ Encrypting real Sheet fields does **not** satisfy the rule.
 ## After robotic account (#66)
 
 Same flows against production `ws_uby` / real facility credentials — only when intentionally going live.
+
+## Agent notes from first smoke
+
+- Blank column M cells are omitted by the Sheets API; GuestCheckin treats a fully empty M column (or trailing blanks) as unregistered.
+- CheckIn PARTIAL_SUCCESS / validation failures put per-guest esults on envelope `meta`; the agent reads those to mark column M only for `accepted`.

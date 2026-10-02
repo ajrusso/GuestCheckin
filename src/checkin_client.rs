@@ -98,10 +98,39 @@ impl CheckInClient {
             .map_err(|e| format!("CheckIn response JSON parse failed: {e}"))?;
 
         let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-        let data = value
+        let mut data = value
             .get("data")
             .cloned()
             .and_then(|d| serde_json::from_value::<SubmitGuestsData>(d).ok());
+
+        // Partial / validation failures put per-guest results on `meta`, not `data`.
+        if data.as_ref().map(|d| d.results.is_empty()).unwrap_or(true) {
+            if let Some(meta) = value.get("meta") {
+                if let Some(results) = meta.get("results") {
+                    if let Ok(parsed) = serde_json::from_value::<Vec<GuestSubmitResult>>(results.clone())
+                    {
+                        if !parsed.is_empty() {
+                            data = Some(SubmitGuestsData {
+                                client_batch_id: meta
+                                    .get("clientBatchId")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string()),
+                                batch_count: meta
+                                    .get("batchCount")
+                                    .and_then(|v| v.as_u64())
+                                    .map(|n| n as u32),
+                                results: parsed,
+                                receipt_ids: meta
+                                    .get("receiptIds")
+                                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                                    .unwrap_or_default(),
+                                has_guest_record_errors: Some(true),
+                            });
+                        }
+                    }
+                }
+            }
+        }
         let error_code = value
             .pointer("/error/code")
             .and_then(|v| v.as_str())
